@@ -5,6 +5,7 @@ from .analytics import Analytics
 from .distance_calculation import DistanceCalculation
 from .heatmap import Heatmap
 from .instance_segmentation import InstanceSegmentation
+from .dashboard_server import DashboardServer
 from .object_blurrer import ObjectBlurrer
 from .object_counter import ObjectCounter
 from .object_cropper import ObjectCropper
@@ -20,6 +21,7 @@ from .vision_eye import VisionEye
 
 __all__ = (
     "AIGym",
+    "DashboardServer",
     "Analytics",
     "DistanceCalculation",
     "Heatmap",
