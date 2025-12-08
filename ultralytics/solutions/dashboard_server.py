@@ -32,12 +32,12 @@ class DashboardServer:
         >>> server.run()
     """
 
-    def __init__(self, model: str = "yolo11n.pt", root: str | Path = "runs/dashboard") -> None:
+    def __init__(self, model: YOLO | str = "yolo11n.pt", root: str | Path = "runs/dashboard") -> None:
         check_requirements("flask>=3.0.1")
         from flask import Flask, jsonify, render_template, request, url_for
         from werkzeug.utils import secure_filename
 
-        self.model = YOLO(model)
+        self.model = model if isinstance(model, YOLO) else YOLO(model)
         self.root = Path(root)
         self.upload_dir = self.root / "uploads"
         self.results_dir = self.root / "results"
@@ -52,8 +52,8 @@ class DashboardServer:
 
         self.app = Flask(
             __name__,
-            template_folder="templates",
-            static_folder=self.results_dir,
+            template_folder=str(Path(__file__).parent / "templates"),
+            static_folder=str(self.results_dir),
             static_url_path="/results",
         )
         self.app.add_url_rule("/", view_func=self.index, methods=["GET"])
