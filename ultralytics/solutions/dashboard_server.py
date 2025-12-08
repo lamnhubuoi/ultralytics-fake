@@ -3,8 +3,11 @@ from __future__ import annotations
 
 import mimetypes
 from datetime import datetime
+from io import BytesIO
 from pathlib import Path
 from typing import Iterable
+
+import zipfile
 
 from ultralytics import YOLO
 from ultralytics.utils import LOGGER
@@ -34,7 +37,7 @@ class DashboardServer:
 
     def __init__(self, model: YOLO | str = "yolo11n.pt", root: str | Path = "runs/dashboard") -> None:
         check_requirements("flask>=3.0.1")
-        from flask import Flask, jsonify, render_template, request, url_for
+        from flask import Flask, jsonify, render_template, request, send_file, url_for
         from werkzeug.utils import secure_filename
 
         self.model = model if isinstance(model, YOLO) else YOLO(model)
@@ -48,6 +51,7 @@ class DashboardServer:
         self._request = request
         self._render_template = render_template
         self._url_for = url_for
+        self._send_file = send_file
         self._secure_filename = secure_filename
 
         self.app = Flask(
@@ -59,6 +63,7 @@ class DashboardServer:
         self.app.add_url_rule("/", view_func=self.index, methods=["GET"])
         self.app.add_url_rule("/health", view_func=self.health, methods=["GET"])
         self.app.add_url_rule("/predict", view_func=self.predict, methods=["POST"])
+        self.app.add_url_rule("/download-results", view_func=self.download_results, methods=["GET"])
 
     def _recent_predictions(self, limit: int = 8) -> list[str]:
         """Return the relative paths for the most recent prediction images."""
@@ -113,6 +118,19 @@ class DashboardServer:
             "timings_ms": timings,
         }
         return self._jsonify(response)
+
+    def download_results(self):
+        """Bundle all saved prediction artifacts into a downloadable zip archive."""
+
+        archive_stream = BytesIO()
+        with zipfile.ZipFile(archive_stream, mode="w", compression=zipfile.ZIP_DEFLATED) as archive:
+            for path in sorted(self.results_dir.rglob("*")):
+                if path.is_file():
+                    archive.write(path, arcname=path.relative_to(self.results_dir))
+
+        archive_stream.seek(0)
+        filename = f"dashboard-results-{datetime.utcnow():%Y%m%d-%H%M%S}.zip"
+        return self._send_file(archive_stream, as_attachment=True, download_name=filename, mimetype="application/zip")
 
     def run(self, host: str = "0.0.0.0", port: int = 8000, debug: bool = False) -> None:
         """Start the Flask application."""

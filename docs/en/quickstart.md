@@ -420,7 +420,8 @@ server.run(host="0.0.0.0", port=8000)
 ```
 
 The server provides `/` for the dashboard UI, `/predict` for POSTing images, and `/health` for quick status checks so you can
-integrate it with existing monitoring workflows.
+integrate it with existing monitoring workflows. All saved predictions can be downloaded as a single archive via `/download-results`,
+making it easy to share runs or transfer artifacts elsewhere.
 
 ## Ultralytics Settings
 
