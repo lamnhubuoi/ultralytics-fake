@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Ultralytics Dashboard Server</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --accent: #4c8bf5;
+    }
+    body {
+      margin: 0 auto;
+      padding: 1.5rem;
+      max-width: 960px;
+      font-family: "Inter", system-ui, -apple-system, sans-serif;
+      line-height: 1.6;
+      background: #0b1117;
+      color: #e6edf3;
+    }
+    header {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+      margin-bottom: 1.5rem;
+    }
+    h1 {
+      font-size: 1.8rem;
+      margin: 0;
+    }
+    .card {
+      background: #0f1724;
+      border: 1px solid #1e2635;
+      border-radius: 12px;
+      padding: 1.25rem;
+      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.25);
+    }
+    label {
+      display: block;
+      margin-bottom: 0.5rem;
+      font-weight: 600;
+    }
+    input[type="file"] {
+      display: block;
+      width: 100%;
+      margin-bottom: 0.75rem;
+    }
+    button {
+      background: var(--accent);
+      border: none;
+      color: #fff;
+      padding: 0.65rem 1.2rem;
+      border-radius: 10px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: transform 0.1s ease, box-shadow 0.1s ease;
+      box-shadow: 0 10px 30px rgba(76, 139, 245, 0.2);
+    }
+    button:hover { transform: translateY(-1px); }
+    button:active { transform: translateY(0); box-shadow: none; }
+    .button-secondary {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      background: #1b2838;
+      color: #e6edf3;
+      border: 1px solid #243447;
+      text-decoration: none;
+      padding: 0.55rem 1rem;
+      border-radius: 10px;
+      font-weight: 700;
+      box-shadow: none;
+    }
+    .button-row {
+      display: flex;
+      gap: 0.75rem;
+      align-items: center;
+      margin-top: 0.75rem;
+      flex-wrap: wrap;
+    }
+    .status {
+      margin-top: 0.75rem;
+      padding: 0.75rem;
+      background: #11213a;
+      border-radius: 10px;
+      border: 1px solid #1f3554;
+      font-size: 0.95rem;
+      min-height: 1.5rem;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+      gap: 1rem;
+      margin-top: 1rem;
+    }
+    figure {
+      margin: 0;
+      background: #0f1724;
+      border: 1px solid #1e2635;
+      border-radius: 10px;
+      overflow: hidden;
+    }
+    figure img { width: 100%; display: block; }
+    figcaption {
+      padding: 0.6rem;
+      font-size: 0.9rem;
+      border-top: 1px solid #1e2635;
+      color: #a9b4c6;
+      word-break: break-all;
+    }
+    .meta { color: #a9b4c6; font-size: 0.95rem; }
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      padding: 0.35rem 0.7rem;
+      border-radius: 999px;
+      background: #1b2838;
+      border: 1px solid #243447;
+      font-size: 0.9rem;
+      color: #cdd8eb;
+    }
+    @media (max-width: 640px) {
+      body { padding: 1rem; }
+      h1 { font-size: 1.5rem; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Ultralytics Dashboard Server</h1>
+    <div class="meta">Model: <strong>{{ model_label }}</strong></div>
+    <div class="meta">Uploads saved to: <code>{{ upload_dir }}</code></div>
+  </header>
+
+  <section class="card">
+    <form id="predict-form" enctype="multipart/form-data">
+      <label for="file">Upload an image to run inference</label>
+      <input id="file" name="file" type="file" accept="image/*" required>
+      <button type="submit">Run prediction</button>
+    </form>
+    <div class="button-row">
+      <a class="button-secondary" href="/download-results">Download all results (.zip)</a>
+    </div>
+    <div id="status" class="status"></div>
+    <div id="result" class="grid" style="display: none; margin-top: 1.2rem;"></div>
+  </section>
+
+  <section style="margin-top: 1.25rem;">
+    <h2 style="margin-bottom: 0.5rem;">Recent results</h2>
+    {% if recent_results %}
+    <div class="grid">
+      {% for img in recent_results %}
+      <figure>
+        <img src="/results/{{ img }}" alt="Recent result {{ loop.index }}">
+        <figcaption>{{ img }}</figcaption>
+      </figure>
+      {% endfor %}
+    </div>
+    {% else %}
+      <div class="meta">No predictions yet. Upload an image to get started.</div>
+    {% endif %}
+  </section>
+
+  <script>
+    const form = document.getElementById('predict-form');
+    const statusBox = document.getElementById('status');
+    const resultGrid = document.getElementById('result');
+
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      statusBox.textContent = 'Uploading and running inference...';
+      resultGrid.style.display = 'none';
+      resultGrid.innerHTML = '';
+
+      const formData = new FormData(form);
+      try {
+        const response = await fetch('/predict', { method: 'POST', body: formData });
+        const payload = await response.json();
+
+        if (!response.ok) {
+          statusBox.textContent = payload.error || 'Prediction failed. Please try again.';
+          return;
+        }
+
+        statusBox.innerHTML = `Prediction complete. <span class="pill">Inference: ${payload.timings_ms.inference || 'N/A'} ms</span>`;
+        const figure = document.createElement('figure');
+        const img = document.createElement('img');
+        img.src = payload.result_url;
+        img.alt = 'Prediction result';
+        const caption = document.createElement('figcaption');
+        caption.textContent = payload.result_path;
+        figure.appendChild(img);
+        figure.appendChild(caption);
+        resultGrid.appendChild(figure);
+        resultGrid.style.display = 'grid';
+      } catch (error) {
+        console.error(error);
+        statusBox.textContent = 'Unexpected error while uploading the image.';
+      }
+    });
+  </script>
+</body>
+</html>
